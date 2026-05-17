@@ -22,7 +22,7 @@ from typing import List, Dict, Any, Optional, Tuple, Callable
 
 import pandas as pd
 
-from src.config import get_config, Config
+from src.config import FUNDAMENTAL_STAGE_TIMEOUT_SECONDS_DEFAULT, get_config, Config
 from src.storage import get_db
 from data_provider import DataFetcherManager
 from data_provider.base import normalize_stock_code
@@ -327,7 +327,11 @@ class StockAnalysisPipeline:
             try:
                 fundamental_context = self.fetcher_manager.get_fundamental_context(
                     code,
-                    budget_seconds=getattr(self.config, 'fundamental_stage_timeout_seconds', 1.5),
+                    budget_seconds=getattr(
+                        self.config,
+                        'fundamental_stage_timeout_seconds',
+                        FUNDAMENTAL_STAGE_TIMEOUT_SECONDS_DEFAULT,
+                    ),
                 )
             except Exception as e:
                 logger.warning(f"{stock_name}({code}) 基本面聚合失败: {e}")
@@ -1959,6 +1963,7 @@ class StockAnalysisPipeline:
                 channels_needing_image = {
                     ch for ch in channels
                     if ch.value in self.notifier._markdown_to_image_channels
+                    and ch not in {NotificationChannel.NTFY, NotificationChannel.GOTIFY}
                 }
                 non_wechat_channels_needing_image = {
                     ch for ch in channels_needing_image if ch != NotificationChannel.WECHAT
@@ -2154,6 +2159,16 @@ class StockAnalysisPipeline:
                         non_wechat_success = _send_channel_safely(
                             channel.value,
                             lambda: self.notifier.send_to_pushover(report),
+                        ) or non_wechat_success
+                    elif channel == NotificationChannel.NTFY:
+                        non_wechat_success = _send_channel_safely(
+                            channel.value,
+                            lambda: self.notifier.send_to_ntfy(report),
+                        ) or non_wechat_success
+                    elif channel == NotificationChannel.GOTIFY:
+                        non_wechat_success = _send_channel_safely(
+                            channel.value,
+                            lambda: self.notifier.send_to_gotify(report),
                         ) or non_wechat_success
                     elif channel == NotificationChannel.ASTRBOT:
                         non_wechat_success = _send_channel_safely(
